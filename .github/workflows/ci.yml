@@ -1,0 +1,297 @@
+name: ACES-TestLab CI
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+# Least-privilege permissions
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+  # Prevent AbuseIPDB calls — offline fallback is always used in CI
+  ABUSEIPDB_API_KEY: ""
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Lint
+  # -------------------------------------------------------------------------
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Ruff
+        run: pip install ruff==0.4.4
+
+      - name: Run Ruff lint
+        run: ruff check src/ tests/
+        working-directory: "PROJECT FOLDER"
+
+  # -------------------------------------------------------------------------
+  # Unit tests
+  # -------------------------------------------------------------------------
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov==5.0.0 pytest-html==4.1.1 ruff==0.4.4
+        working-directory: "PROJECT FOLDER"
+
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/ \
+            -m "unit" \
+            --cov=src \
+            --cov-report=xml:reports/coverage_unit.xml \
+            --cov-report=term-missing \
+            --junitxml=reports/junit_unit.xml \
+            --html=reports/report_unit.html \
+            --self-contained-html \
+            -v \
+            --tb=short
+        working-directory: "PROJECT FOLDER"
+
+      - name: Upload unit test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-reports
+          path: |
+            PROJECT FOLDER/reports/junit_unit.xml
+            PROJECT FOLDER/reports/report_unit.html
+            PROJECT FOLDER/reports/coverage_unit.xml
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Security tests
+  # -------------------------------------------------------------------------
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: unit-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov==5.0.0 pytest-html==4.1.1
+        working-directory: "PROJECT FOLDER"
+
+      - name: Run security tests
+        run: |
+          pytest tests/ \
+            -m "security" \
+            --cov=src \
+            --cov-report=xml:reports/coverage_security.xml \
+            --cov-report=term-missing \
+            --junitxml=reports/junit_security.xml \
+            -v \
+            --tb=short
+        working-directory: "PROJECT FOLDER"
+
+      - name: Upload security test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-test-reports
+          path: |
+            PROJECT FOLDER/reports/junit_security.xml
+            PROJECT FOLDER/reports/coverage_security.xml
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Integration tests
+  # -------------------------------------------------------------------------
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: unit-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov==5.0.0 pytest-html==4.1.1
+        working-directory: "PROJECT FOLDER"
+
+      - name: Run integration tests
+        run: |
+          pytest tests/ \
+            -m "integration" \
+            --cov=src \
+            --cov-report=xml:reports/coverage_integration.xml \
+            --cov-report=term-missing \
+            --junitxml=reports/junit_integration.xml \
+            --html=reports/report_integration.html \
+            --self-contained-html \
+            -v \
+            --tb=short
+        working-directory: "PROJECT FOLDER"
+
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-reports
+          path: |
+            PROJECT FOLDER/reports/junit_integration.xml
+            PROJECT FOLDER/reports/report_integration.html
+            PROJECT FOLDER/reports/coverage_integration.xml
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Regression tests
+  # -------------------------------------------------------------------------
+  regression-tests:
+    name: Regression Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: unit-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov==5.0.0 pytest-html==4.1.1
+        working-directory: "PROJECT FOLDER"
+
+      - name: Run regression tests
+        run: |
+          pytest tests/ \
+            -m "regression" \
+            --junitxml=reports/junit_regression.xml \
+            --html=reports/report_regression.html \
+            --self-contained-html \
+            -v \
+            --tb=short
+        working-directory: "PROJECT FOLDER"
+
+      - name: Upload regression test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-test-reports
+          path: |
+            PROJECT FOLDER/reports/junit_regression.xml
+            PROJECT FOLDER/reports/report_regression.html
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Full coverage report
+  # -------------------------------------------------------------------------
+  coverage:
+    name: Combined Coverage Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [unit-tests, security-tests, integration-tests, regression-tests]
+    if: always()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov==5.0.0 pytest-html==4.1.1
+        working-directory: "PROJECT FOLDER"
+
+      - name: Run all tests (combined coverage)
+        run: |
+          pytest tests/ \
+            -m "unit or security or integration or regression" \
+            --cov=src \
+            --cov-report=html:reports/coverage_html \
+            --cov-report=xml:reports/coverage_combined.xml \
+            --cov-report=term-missing \
+            --junitxml=reports/junit_all.xml \
+            --html=reports/report_all.html \
+            --self-contained-html \
+            -v \
+            --tb=short
+        working-directory: "PROJECT FOLDER"
+
+      - name: Upload combined reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: combined-reports
+          path: |
+            PROJECT FOLDER/reports/junit_all.xml
+            PROJECT FOLDER/reports/report_all.html
+            PROJECT FOLDER/reports/coverage_html/
+            PROJECT FOLDER/reports/coverage_combined.xml
+          retention-days: 90
